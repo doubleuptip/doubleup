@@ -117,6 +117,22 @@
   .dl:hover,.dl:focus-visible{background:var(--orange)}
   .dl span{font-size:11.5px;font-weight:600;opacity:.65;letter-spacing:1px}
 
+  /* SOCIAL */
+  .socials{display:flex;flex-wrap:wrap;gap:18px}
+  .soc{flex:1 1 210px;background:var(--panel);border:1px solid var(--line);
+    padding:30px 24px 26px;text-decoration:none;color:inherit;display:block;
+    transition:.15s;position:relative}
+  a.soc:hover,a.soc:focus-visible{border-color:var(--lime);transform:translateY(-2px)}
+  .soc svg{width:38px;height:38px;display:block;margin-bottom:18px;fill:var(--ink);transition:.15s}
+  a.soc:hover svg{fill:var(--lime)}
+  .soc .nome{font-size:19px;font-weight:800;letter-spacing:-.3px}
+  .soc .tag2{font-size:13.5px;color:var(--muted);margin-top:4px;word-break:break-all}
+  .soc .vai{margin-top:16px;font-size:11.5px;font-weight:800;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--lime)}
+  .soc.soon{opacity:.55}
+  .soc.soon svg{fill:var(--muted)}
+  .soc.soon .vai{color:var(--muted)}
+
   /* NOTE */
   .noteitem{padding:24px 0;border-bottom:1px solid var(--line)}
   .noteitem:first-child{padding-top:0}
@@ -186,6 +202,7 @@
       <a href="#risultati" data-r="risultati">Risultati</a>
       <a href="#note" data-r="note">Note</a>
       <a href="#bio" data-r="bio">Bio</a>
+      <a href="#social" data-r="social">Social</a>
       <a href="#dati" data-r="dati">Dati</a>
     </nav>
   </div>
@@ -280,6 +297,13 @@
     </div>
   </div>
 
+  <!-- SOCIAL -->
+  <div class="page" data-page="social">
+    <h1 class="ptitle">Social</h1>
+    <p class="pintro">Gli stessi contenuti, in forma più breve. Il registro completo resta qui sul sito.</p>
+    <div class="socials" id="socials"><p class="msg">Carico…</p></div>
+  </div>
+
   <!-- DATI -->
   <div class="page" data-page="dati">
     <h1 class="ptitle">Dati</h1>
@@ -301,7 +325,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 const C = {orange:"#FF6A16", lime:"#C4FF3D", muted:"#7E7E78", line:"#262626", ink:"#F2F2F0"};
-const TITLES = {riepilogo:"Riepilogo", risultati:"Risultati", note:"Note", bio:"Bio", dati:"Dati"};
+const TITLES = {riepilogo:"Riepilogo", risultati:"Risultati", note:"Note", bio:"Bio", social:"Social", dati:"Dati"};
 
 const eur   = n => (n<0?"−":"+") + Math.abs(n).toLocaleString("it-IT",{maximumFractionDigits:2}) + " €";
 const plain = n => n.toLocaleString("it-IT",{maximumFractionDigits:2}) + " €";
@@ -309,11 +333,44 @@ const pc    = n => (n<0?"−":"+") + Math.abs(n).toLocaleString("it-IT",{maximum
 const esc   = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const sign  = n => n>0?"pos":(n<0?"neg":"");
 
+// Tutte le date vengono normalizzate a mezzogiorno locale: le stringhe tipo
+// "2026-09-01" verrebbero lette come mezzanotte UTC e, per chi visita il sito
+// da un fuso a ovest di Greenwich, scivolerebbero al giorno (e al mese) prima.
 function toDate(v){
-  if (v instanceof Date) return v;
-  if (typeof v === "number") return new Date(Date.UTC(1899,11,30) + v*86400000);
-  const d = new Date(v); return isNaN(d) ? null : d;
+  if(v == null || v === "") return null;
+  const local = (y,m,g) => new Date(y, m, g, 12);
+
+  if(v instanceof Date)
+    return isNaN(v) ? null : local(v.getFullYear(), v.getMonth(), v.getDate());
+
+  if(typeof v === "number"){                      // seriale Excel
+    const u = new Date(Date.UTC(1899,11,30) + Math.round(v)*86400000);
+    return local(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate());
+  }
+
+  const s = String(v).trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);              // 2026-09-01
+  if(m) return local(+m[1], +m[2]-1, +m[3]);
+  m = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})$/);     // 01/09/2026
+  if(m) return local(+m[3], +m[2]-1, +m[1]);
+
+  const d = new Date(s);
+  return isNaN(d) ? null : local(d.getFullYear(), d.getMonth(), d.getDate());
 }
+
+// Accetta sia 1.85 sia 1,85, e tollera il simbolo di valuta.
+function num(v){
+  if(typeof v === "number") return v;
+  if(v == null) return NaN;
+  let s = String(v).trim().replace(/[€\s\u00a0]/g,"");
+  if(!s) return NaN;
+  const c = s.lastIndexOf(","), p = s.lastIndexOf(".");
+  if(c > -1 && p > -1)      s = c > p ? s.replace(/\./g,"").replace(",",".") : s.replace(/,/g,"");
+  else if(c > -1)           s = s.replace(",",".");
+  return Number(s);
+}
+
+const mesePrimoGiorno = k => { const [y,m] = k.split("-"); return new Date(+y, +m-1, 1, 12); };
 const fmtShort = d => d ? d.toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "";
 const fmtLong  = d => d ? d.toLocaleDateString("it-IT",{day:"numeric",month:"long",year:"numeric"}) : "";
 const monthKey = d => d ? d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0") : "";
@@ -335,6 +392,7 @@ function fail(msg){
   document.getElementById("stats").innerHTML = '<div class="stat"><div class="msg err">'+esc(msg)+'</div></div>';
   document.getElementById("rows").innerHTML  = '<tr><td colspan="8" class="msg err">'+esc(msg)+'</td></tr>';
   document.getElementById("notes").innerHTML = m;
+  document.getElementById("socials").innerHTML = m;
 }
 
 /* ---------------- STATISTICHE ---------------- */
@@ -394,7 +452,7 @@ function renderStats(){
   ];
   if(s.aperte) sub.push(["", s.aperte, "Aperte"]);
   if(s.bestM) sub.push([sign(s.bestM[1]), eur(s.bestM[1]),
-    "Mese migliore · " + monthLbl(new Date(s.bestM[0]+"-01"))]);
+    "Mese migliore · " + monthLbl(mesePrimoGiorno(s.bestM[0]))]);
   document.getElementById("substats").innerHTML = sub.map(([c,n,l]) =>
     `<div class="substat"><div class="n ${c}">${n}</div><div class="l">${l}</div></div>`).join("");
 }
@@ -492,7 +550,7 @@ function renderRows(){
                   : '<td class="msg">—</td>';
         return `<tr><td>${fmtShort(b.data)}</td><td>${esc(b.sport??"")}</td>`
              + `<td>${esc(b.evento)}</td><td>${esc(b.tipo??"")}</td>`
-             + `<td>${b.quota.toLocaleString("it-IT",{minimumFractionDigits:2})}</td>`
+             + `<td>${b.quotaOk ? b.quota.toLocaleString("it-IT",{minimumFractionDigits:2}) : "—"}</td>`
              + `<td>${plain(b.imp)}</td><td>${tag}</td>${sal}</tr>`;
       }).join("")
     : '<tr><td colspan="8" class="msg">Nessuna giocata corrisponde ai filtri.</td></tr>';
@@ -511,7 +569,7 @@ function initControls(){
 
   const mesi = [...new Set(BETS.map(b=>monthKey(b.data)).filter(Boolean))].sort().reverse();
   document.getElementById("fPeriodo").insertAdjacentHTML("beforeend",
-    mesi.map(m=>`<option value="${m}">${esc(monthLbl(new Date(m+"-01")))}</option>`).join(""));
+    mesi.map(m=>`<option value="${m}">${esc(monthLbl(mesePrimoGiorno(m)))}</option>`).join(""));
 
   ["fSport","fEsito","fPeriodo"].forEach(id =>
     document.getElementById(id).addEventListener("change", renderRows));
@@ -545,6 +603,39 @@ function renderNotes(){
     : '<p class="msg">Nessuna nota. Aggiungine una nel foglio "Note" del tracker.</p>';
 }
 
+/* ---------------- SOCIAL ---------------- */
+const SOCIAL_ICONS = {
+  x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.9 1.6h3.7l-8.1 9.2 9.5 12.6h-7.4l-5.8-7.6-6.7 7.6H.4l8.6-9.9L0 1.6h7.6l5.2 6.9zM17.6 21.2h2L6.5 3.6H4.3z"/></svg>',
+  instagram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.7.1-1.1.1-1.7.2-2.1.4-.5.2-.9.4-1.2.8-.4.3-.6.7-.8 1.2-.2.4-.3 1-.4 2.1C2.7 8.5 2.7 8.9 2.7 12s0 3.5.1 4.7c.1 1.1.2 1.7.4 2.1.2.5.4.9.8 1.2.3.4.7.6 1.2.8.4.2 1 .3 2.1.4 1.2.1 1.6.1 4.7.1s3.5 0 4.7-.1c1.1-.1 1.7-.2 2.1-.4.5-.2.9-.4 1.2-.8.4-.3.6-.7.8-1.2.2-.4.3-1 .4-2.1.1-1.2.1-1.6.1-4.7s0-3.5-.1-4.7c-.1-1.1-.2-1.7-.4-2.1-.2-.5-.4-.9-.8-1.2-.3-.4-.7-.6-1.2-.8-.4-.2-1-.3-2.1-.4-1.2-.1-1.6-.1-4.7-.1zm0 3.1a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1 0-11.8zm0 1.8a4.1 4.1 0 1 0 0 8.2 4.1 4.1 0 0 0 0-8.2zm6.1-2.9a1.4 1.4 0 1 1 0 2.8 1.4 1.4 0 0 1 0-2.8z"/></svg>',
+  telegram: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M23.9 3.8 20.3 20.9c-.3 1.2-1 1.5-2 .9l-5.5-4-2.7 2.6c-.3.3-.6.6-1.2.6l.4-6 10.9-9.8c.5-.4-.1-.7-.7-.3L5.9 11.6.1 9.8c-1.2-.4-1.3-1.2.3-1.8L22.3 2c1-.4 1.9.2 1.6 1.8z"/></svg>'
+};
+const SOCIAL_ORDINE = ["X","Instagram","Telegram"];
+
+// accetta solo http/https: evita che un indirizzo scritto male nel foglio
+// diventi un link eseguibile
+function urlSicuro(u){
+  const s = String(u||"").trim();
+  if(!s) return "";
+  try{
+    const p = new URL(s.includes("://") ? s : "https://"+s);
+    return (p.protocol === "http:" || p.protocol === "https:") ? p.href : "";
+  }catch(e){ return ""; }
+}
+
+function renderSocial(map){
+  document.getElementById("socials").innerHTML = SOCIAL_ORDINE.map(nome => {
+    const riga = map[nome.toLowerCase()] || {};
+    const href = urlSicuro(riga.url);
+    const icona = SOCIAL_ICONS[nome.toLowerCase()] || "";
+    const etichetta = riga.etichetta ? `<div class="tag2">${esc(riga.etichetta)}</div>` : "";
+    const corpo = `${icona}<div class="nome">${esc(nome)}</div>${etichetta}`;
+    return href
+      ? `<a class="soc" href="${esc(href)}" target="_blank" rel="noopener noreferrer">`
+        + `${corpo}<div class="vai">Apri il profilo →</div></a>`
+      : `<div class="soc soon">${corpo}<div class="vai">Presto disponibile</div></div>`;
+  }).join("");
+}
+
 function showArticle(s){
   const i = NOTES.findIndex(n => n.slug === s);
   if(i < 0) return false;
@@ -566,8 +657,11 @@ function showArticle(s){
 function show(page){
   document.querySelectorAll(".page").forEach(p =>
     p.classList.toggle("on", p.dataset.page === page));
-  document.querySelectorAll("#nav a").forEach(a =>
-    a.classList.toggle("on", a.dataset.r === page || (page === "nota" && a.dataset.r === "note")));
+  document.querySelectorAll("#nav a").forEach(a => {
+    const attiva = a.dataset.r === page || (page === "nota" && a.dataset.r === "note");
+    a.classList.toggle("on", attiva);
+    if(attiva) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
+  });
 }
 
 function route(){
@@ -625,7 +719,22 @@ async function load(){
       const c = document.getElementById("contact");
       c.textContent = map["Nota finale"]; c.hidden = false;
     }
+  } else {
+    document.getElementById("bioText").innerHTML =
+      '<p class="msg">Aggiungi un foglio "Bio" al tracker per riempire questa pagina.</p>';
+    document.getElementById("findList").innerHTML = "";
   }
+
+  // Social
+  const socsh = wb.Sheets["Social"];
+  const socMap = {};
+  if(socsh){
+    XLSX.utils.sheet_to_json(socsh,{defval:null}).forEach(r => {
+      const p = String(r["Piattaforma"]||"").trim().toLowerCase();
+      if(p) socMap[p] = {url:r["Indirizzo"], etichetta:r["Etichetta"]};
+    });
+  }
+  renderSocial(socMap);
 
   // Scommesse
   const sh = wb.Sheets["Scommesse"];
@@ -635,14 +744,18 @@ async function load(){
     .map(r => ({
       data:  toDate(r["Data"]),
       sport: r["Sport"], evento: r["Evento"], tipo: r["Tipo Scommessa"],
-      quota: Number(r["Quota"]), imp: Number(r["Importo Scommesso (€)"]),
+      quota: num(r["Quota"]), imp: num(r["Importo Scommesso (€)"]),
       esito: (r["Esito"]||"").toString().trim()
     }))
-    .filter(b => b.evento && b.imp > 0);
+    .filter(b => b.evento && Number.isFinite(b.imp) && b.imp > 0);
 
   BETS.forEach(b => {
     const e = b.esito.toLowerCase();
-    b.vinta = e === "vinta"; b.persa = e === "persa";
+    b.quotaOk = Number.isFinite(b.quota) && b.quota > 0;
+    // senza una quota valida la vincita non è calcolabile: la giocata resta
+    // in elenco ma viene trattata come aperta, così non falsa i totali
+    b.vinta = e === "vinta" && b.quotaOk;
+    b.persa = e === "persa";
     b.saldo = b.vinta ? b.quota*b.imp - b.imp : (b.persa ? -b.imp : 0);
   });
 
